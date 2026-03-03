@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+
+# Virtual environment
+.venv/
+venv/
+Lib/
+Scripts/
+Include/
+pyvenv.cfg
+
+# Environment variables
+.env
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Alembic cache
+alembic/versions/__pycache__/
+alembic/__pycache__/
+
+# OS/Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
