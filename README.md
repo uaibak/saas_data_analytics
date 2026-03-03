@@ -1,16 +1,15 @@
-# Research-Oriented SaaS Data Analytics Platform (Phase 1)
+# Research-Oriented SaaS Data Analytics Platform (Phases 1-2)
 
-Backend foundation for a multi-tenant SaaS platform using FastAPI + PostgreSQL.
+FastAPI backend for a multi-tenant SaaS platform with JWT auth, RBAC, and dataset ingestion/metadata foundation.
 
-This phase implements:
-- JWT authentication
-- Role-Based Access Control (Admin, Researcher, Viewer)
-- Multi-tenant organization structure
-- Secure password hashing with passlib + bcrypt
-- PostgreSQL integration via SQLAlchemy
-- Alembic migration workflow
+Implemented:
+- Phase 1: Authentication, authorization, organization multi-tenancy
+- Phase 2: Dataset upload, storage, metadata extraction, preview, tenant isolation
 
-No analytics, ML, datasets, or subscriptions are included in this phase.
+Not included yet:
+- Analytics workflows
+- ML training/inference
+- Subscriptions/billing
 
 ## Tech Stack
 
@@ -19,8 +18,9 @@ No analytics, ML, datasets, or subscriptions are included in this phase.
 - SQLAlchemy 2.x
 - PostgreSQL
 - Alembic
-- passlib[bcrypt]
+- passlib + bcrypt
 - python-jose (JWT)
+- pandas + openpyxl
 
 ## Project Structure
 
@@ -36,25 +36,31 @@ app/
 +-- models/
 ¦   +-- organization.py
 ¦   +-- user.py
+¦   +-- dataset.py
+¦   +-- dataset_column.py
 +-- schemas/
 ¦   +-- auth.py
 ¦   +-- user.py
+¦   +-- dataset.py
 +-- api/
 ¦   +-- deps.py
 ¦   +-- routes/
 ¦       +-- auth.py
 ¦       +-- users.py
+¦       +-- datasets.py
 +-- services/
+    +-- file_storage_service.py
+    +-- dataset_service.py
 
 alembic/
-+-- env.py
 +-- versions/
     +-- 0001_initial_schema.py
+    +-- 0002_datasets_metadata.py
 ```
 
 ## Environment Variables
 
-Create a `.env` file from the example:
+Copy template:
 
 ```powershell
 copy .env.example .env
@@ -68,150 +74,115 @@ SECRET_KEY=your_long_random_secret
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 BACKEND_CORS_ORIGINS=["http://localhost:3000","http://localhost:5173"]
+STORAGE_ROOT=storage
+MAX_UPLOAD_SIZE_MB=10
+CATEGORICAL_UNIQUE_RATIO_THRESHOLD=0.05
 ```
 
-If your DB password contains special characters (`@`, `#`, etc.), URL-encode it in `DATABASE_URL`.
-
-Example:
-- raw password: `@lphaBetaSaasAi@#008`
-- encoded password: `%40lphaBetaSaasAi%40%23008`
+If password has special chars, URL-encode it (for example `@` -> `%40`, `#` -> `%23`).
 
 ## Local Setup
 
-1. Create virtual environment
-
 ```powershell
 python -m venv .venv
-```
-
-2. Activate virtual environment (PowerShell)
-
-```powershell
 .\.venv\Scripts\Activate.ps1
-```
-
-3. Install dependencies
-
-```powershell
 pip install -e .
-```
-
-4. Ensure bcrypt compatibility for passlib
-
-```powershell
 python -m pip install --upgrade --force-reinstall bcrypt==4.0.1
 ```
 
-## Database Migrations
-
-Run all migrations:
+## Migrations
 
 ```powershell
 alembic upgrade head
 ```
 
-Rollback to base if needed:
-
-```powershell
-alembic downgrade base
-```
-
-Create a new migration after model changes:
-
-```powershell
-alembic revision --autogenerate -m "your message"
-```
-
-## Run the API
+## Run Server
 
 ```powershell
 uvicorn app.main:app --reload
 ```
 
 - Base URL: `http://127.0.0.1:8000`
-- Swagger Docs: `http://127.0.0.1:8000/docs`
-- Health check: `GET /health`
+- Swagger: `http://127.0.0.1:8000/docs`
+- Health: `GET /health`
 
-## API Endpoints (Phase 1)
+## API Endpoints
 
 ### Auth
-- `POST /api/v1/auth/register`
-  - Body: `email`, `password`, `full_name`, `organization_name`
-  - Behavior:
-    - Creates organization if it does not exist
-    - First user in organization becomes `Admin`
-    - Returns JWT access token
-
-- `POST /api/v1/auth/login`
-  - Body: `email`, `password`
-  - Returns JWT access token
+- `POST /api/v1/auth/register` (JSON)
+- `POST /api/v1/auth/login` (JSON)
+- `POST /api/v1/auth/token` (OAuth2 form; used by Swagger Authorize)
 
 ### Users
-- `GET /api/v1/users/me`
-  - Requires Bearer token
-  - Returns currently authenticated user
+- `GET /api/v1/users/me` (Any authenticated user)
+- `GET /api/v1/users` (Admin)
+- `PUT /api/v1/users/{id}` (Admin)
+- `DELETE /api/v1/users/{id}` (Admin, soft deactivate)
 
-- `GET /api/v1/users`
-  - Admin only
-  - Returns users in the same organization
+### Datasets
+- `POST /api/v1/datasets/upload` (Admin, Researcher)
+  - multipart form fields: `name`, `description`, `file`
+  - accepted file types: `.csv`, `.xlsx`
+  - max file size: `MAX_UPLOAD_SIZE_MB`
+  - stored under: `storage/{organization_id}/{dataset_id}/filename`
+  - extracts metadata: row count, column count, per-column type/missing/unique count
 
-- `PUT /api/v1/users/{id}`
-  - Admin only
-  - Update user role and/or activation status
+- `GET /api/v1/datasets` (All roles in same organization)
+  - returns active datasets only
 
-- `DELETE /api/v1/users/{id}`
-  - Admin only
-  - Soft delete via `is_active=false`
+- `GET /api/v1/datasets/{dataset_id}/preview` (All roles in same organization)
+  - query: `page` (default `1`), `page_size` (default `100`, max `1000`)
+  - returns preview rows + column names/types + counts
 
-## Authentication in Swagger
+- `DELETE /api/v1/datasets/{dataset_id}` (Admin)
+  - soft delete only (`is_active=false`)
+  - file is retained on disk
 
-1. Call `POST /api/v1/auth/login`.
-2. Copy `access_token` from response.
-3. Click **Authorize** in Swagger.
-4. Paste token as:
+## Security and Isolation
 
-```text
-Bearer <access_token>
-```
+- JWT required on protected routes
+- RBAC enforced (Admin/Researcher/Viewer)
+- Organization-based access isolation for users and datasets
+- Strict file extension validation
+- Upload-size enforcement (`413`)
+- Sanitized filenames and controlled storage path
 
-Leave `client_id` and `client_secret` empty.
+## Error Semantics
 
-## Error Handling
+- `400` invalid input or unreadable dataset file
+- `401` unauthorized
+- `403` insufficient role
+- `404` resource not found in tenant scope
+- `413` payload too large
 
-Structured JSON responses with relevant status codes:
-- `400` invalid input
-- `401` authentication failure
-- `403` unauthorized role/access
-- `404` resource not found
+## Swagger Usage
+
+### Option A (recommended)
+1. Open `/docs`.
+2. Click `Authorize`.
+3. Enter:
+   - `username` = your account email
+   - `password` = your account password
+4. Submit (uses `POST /api/v1/auth/token`).
+
+### Option B
+1. Call `POST /api/v1/auth/login` with JSON.
+2. Copy `access_token`.
+3. Click `Authorize` and paste `Bearer <token>`.
 
 ## Notes
 
+- Dataset name must be unique per organization.
 - Email is globally unique.
-- Every user belongs to exactly one organization.
-- Organization-level isolation is enforced in user-management logic.
-- Passwords are hashed and never returned by API responses.
-- bcrypt has a 72-byte input limit; API validates and rejects overly long passwords.
+- Password hashing uses passlib+bcrypt; bcrypt passwords must be <= 72 bytes.
 
 ## Git Push Checklist
 
-Before pushing:
-
-1. Ensure `.env` is not committed.
-2. Run migration status check:
-
 ```powershell
-alembic current
-```
-
-3. Start server and sanity-check:
-- `/health`
-- `/docs`
-- register -> login -> `/users/me`
-
-4. Commit:
-
-```powershell
+git status
 git add .
-git commit -m "phase1: backend foundation with auth, rbac, multitenancy, migrations"
+git commit -m "phase2: dataset upload and metadata foundation"
 git push
 ```
+
+Ensure `.env` is not committed.

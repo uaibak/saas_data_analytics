@@ -16,6 +16,7 @@ pyvenv.cfg
 
 # Environment variables
 .env
+storage/
 
 # Tooling caches
 .pytest_cache/

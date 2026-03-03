@@ -36,3 +36,4 @@ class User(Base):
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     organization = relationship("Organization", back_populates="users")
+    datasets_uploaded = relationship("Dataset", back_populates="uploader")

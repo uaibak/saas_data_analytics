@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str
 
     BACKEND_CORS_ORIGINS: List[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    STORAGE_ROOT: str = "storage"
+    MAX_UPLOAD_SIZE_MB: int = 10
+    CATEGORICAL_UNIQUE_RATIO_THRESHOLD: float = 0.05
 
 
 @lru_cache

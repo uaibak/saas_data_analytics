@@ -15,3 +15,4 @@ class Organization(Base):
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     users = relationship("User", back_populates="organization", cascade="all, delete-orphan")
+    datasets = relationship("Dataset", back_populates="organization", cascade="all, delete-orphan")
