@@ -27,5 +27,6 @@ class UserOut(UserBase):
     id: UUID
     role: UserRole
     organization_id: UUID
+    organization_name: str | None = None
     is_active: bool
     created_at: datetime

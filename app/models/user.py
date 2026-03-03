@@ -37,3 +37,9 @@ class User(Base):
 
     organization = relationship("Organization", back_populates="users")
     datasets_uploaded = relationship("Dataset", back_populates="uploader")
+
+    @property
+    def organization_name(self) -> str | None:
+        if self.organization is None:
+            return None
+        return self.organization.name
